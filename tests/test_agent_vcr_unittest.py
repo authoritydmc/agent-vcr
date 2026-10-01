@@ -45,6 +45,44 @@ class TestAgentVCR(unittest.TestCase):
         self.assertEqual(sanitized["nested"]["safe_val"], 42)
         self.assertEqual(sanitized["query"], "What is the weather in Paris?")
 
+    def test_sanitizer_api_tokens_and_headers(self):
+        sanitizer = Sanitizer()
+        text = (
+            "OpenAI: sk-proj-abc12345678901234567890 and sk-1234567890123456789012345. "
+            "Anthropic: sk-ant-api03-abcdef123456789012345678. "
+            "GitHub: ghp_123456789012345678901234567890123456 and gho_123456789012345678901234567890123456. "
+            "Slack: xoxb-1234567890-abcdefghij. "
+            "Header: Authorization: Bearer secret_bearer_token_123456789 and x-api-key: custom_token_123456789"
+        )
+        sanitized = sanitizer.sanitize(text)
+        self.assertNotIn("sk-proj-", sanitized)
+        self.assertNotIn("sk-ant-", sanitized)
+        self.assertNotIn("ghp_", sanitized)
+        self.assertNotIn("gho_", sanitized)
+        self.assertNotIn("xoxb-", sanitized)
+        self.assertNotIn("secret_bearer_token", sanitized)
+        self.assertNotIn("custom_token", sanitized)
+
+    def test_sanitizer_query_parameters_and_keys(self):
+        sanitizer = Sanitizer()
+        url = "https://api.openai.com/v1/chat?api_key=secret_key_12345&foo=bar&token=secret_tok_98765"
+        sanitized_url = sanitizer.sanitize(url)
+        self.assertEqual(
+            sanitized_url,
+            f"https://api.openai.com/v1/chat?api_key={REDACTED_PLACEHOLDER}&foo=bar&token={REDACTED_PLACEHOLDER}",
+        )
+
+        headers = {
+            "X-Api-Key": "my-secret-key",
+            "Set-Cookie": "session=xyz123",
+            "Content-Type": "application/json",
+        }
+        sanitized_headers = sanitizer.sanitize(headers)
+        self.assertEqual(sanitized_headers["X-Api-Key"], REDACTED_PLACEHOLDER)
+        self.assertEqual(sanitized_headers["Set-Cookie"], REDACTED_PLACEHOLDER)
+        self.assertEqual(sanitized_headers["Content-Type"], "application/json")
+
+
     def test_basic_record_and_replay(self):
         cassette_path = self.tmp_path / "test_cassette.yaml"
         call_counter = {"count": 0}
