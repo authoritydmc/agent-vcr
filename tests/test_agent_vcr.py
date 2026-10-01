@@ -36,6 +36,43 @@ def test_sanitizer_redacts_keys_and_patterns():
     assert sanitized["query"] == "What is the weather in Paris?"
 
 
+def test_sanitizer_api_tokens_and_headers():
+    sanitizer = Sanitizer()
+    text = (
+        "OpenAI: sk-proj-abc12345678901234567890 and sk-1234567890123456789012345. "
+        "Anthropic: sk-ant-api03-abcdef123456789012345678. "
+        "GitHub: ghp_123456789012345678901234567890123456 and gho_123456789012345678901234567890123456. "
+        "Slack: xoxb-1234567890-abcdefghij. "
+        "Header: Authorization: Bearer secret_bearer_token_123456789 and x-api-key: custom_token_123456789"
+    )
+    sanitized = sanitizer.sanitize(text)
+    assert "sk-proj-" not in sanitized
+    assert "sk-ant-" not in sanitized
+    assert "ghp_" not in sanitized
+    assert "gho_" not in sanitized
+    assert "xoxb-" not in sanitized
+    assert "secret_bearer_token" not in sanitized
+    assert "custom_token" not in sanitized
+
+
+def test_sanitizer_query_parameters_and_keys():
+    sanitizer = Sanitizer()
+    url = "https://api.openai.com/v1/chat?api_key=secret_key_12345&foo=bar&token=secret_tok_98765"
+    sanitized_url = sanitizer.sanitize(url)
+    assert sanitized_url == f"https://api.openai.com/v1/chat?api_key={REDACTED_PLACEHOLDER}&foo=bar&token={REDACTED_PLACEHOLDER}"
+
+    headers = {
+        "X-Api-Key": "my-secret-key",
+        "Set-Cookie": "session=xyz123",
+        "Content-Type": "application/json",
+    }
+    sanitized_headers = sanitizer.sanitize(headers)
+    assert sanitized_headers["X-Api-Key"] == REDACTED_PLACEHOLDER
+    assert sanitized_headers["Set-Cookie"] == REDACTED_PLACEHOLDER
+    assert sanitized_headers["Content-Type"] == "application/json"
+
+
+
 def test_basic_record_and_replay(tmp_path: Path):
     cassette_path = tmp_path / "test_cassette.yaml"
     call_counter = {"count": 0}
